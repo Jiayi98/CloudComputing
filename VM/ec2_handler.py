@@ -42,7 +42,7 @@ class EC2ResourceHandler:
             if 'Name' in image:
                 image_name = image['Name']
                 # Modify following line to search for Amazon Linux AMI for us-east-1
-                if image_name.find("ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-2018") >= 0:
+                if image_name.find("Amazon Linux") >= 0:
                     ami_id = image['ImageId']
                     break
         return ami_id
@@ -69,10 +69,32 @@ class EC2ResourceHandler:
         
         # 2. Get security group id of the 'default' security group
         default_security_group_id = ''
+        response_SGs = self.client.describe_security_groups()["SecurityGroups"]
+        for security_group in response_SGs:
+            if 'GroupName' in security_group:
+                group_name = security_group["GroupName"]
+                if group_name == 'default':
+                    default_security_group_id = security_group["GroupId"]
+
 
         # 3. Create a new security group
+        response = self.client.create_security_group(
+            Description='This is a new security group',
+            GroupName='NEW_SECURITY_GROUP9'
+        )
+        group_id = response['GroupId']
+        # for testing
+        # print('=====',response,'======')
         # 4. Authorize ingress traffic for the group from anywhere to Port 80 for HTTP traffic
-        http_security_group_id = ''
+        response = self.client.authorize_security_group_ingress(
+            GroupId=group_id,
+            IpPermissions=[{
+                'IpProtocol':'TCP',
+                'FromPort' :80,
+                'ToPort': 80,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+            }])
+        http_security_group_id = group_id
 
         security_groups.append(default_security_group_id)
         security_groups.append(http_security_group_id)
@@ -102,6 +124,11 @@ class EC2ResourceHandler:
         # 5. Parse instance_id from the response
         instance_id = ''
 
+        for r in response['Instances']:
+            if 'InstanceId' in r:
+                instance_id = r['InstanceId']
+
+
         return instance_id
 
 
@@ -110,17 +137,56 @@ class EC2ResourceHandler:
         self.logger.info("Entered get")
 
         # Use describe_instances call
-        
-        return
+        # You should print the Public DNS name for the instance and its Public IP address. See the Output section for details.
+
+        response = self.client.describe_instances(InstanceIds=[instance_id])
+        for r in response['Reservations']:
+            for i in r['Instances']:
+                str1 = 'http://'
+                str2 = '/phpinfo.php'
+                print(str1+i['PrivateDnsName']+str2)
+                print(i['PrivateIpAddress']+str2)
 
 
     # 7. Add logic to terminate the created instance
     def delete(self, instance_id):
         self.logger.info("Entered delete")
-
+        group_id = ''
+        group_name = 'NEW_SECURITY_GROUP9'
+        
+        response_SGs = self.client.describe_security_groups()["SecurityGroups"]
+        for security_group in response_SGs:
+            if 'GroupName' in security_group:
+                if security_group["GroupName"] == 'NEW_SECURITY_GROUP9':
+                    group_id = security_group["GroupId"]
+        # print(group_name, group_id)
+        
+        status = ''
+        response = self.client.describe_instance_status(InstanceIds=[instance_id])
+        # response['InstanceStatuses'] is a list
+        for r in response['InstanceStatuses']:
+            # r is a dic
+            if 'InstanceState' in r:
+                status = r['InstanceState']['Name']
+                # print('=========instances status1========', r['InstanceState']['Name'])
+        # print('=========instances status XXX ========')
         # Use terminate_instances call
+        while status != 'terminated':
+            response = self.client.terminate_instances(InstanceIds=[instance_id])
+            status = response['TerminatingInstances'][0]['CurrentState']['Name']
+            # print('=========  IN LOOP  ========', status)
 
-        return
+
+        # print("=========instances status  ========",status)
+
+        self.client.delete_security_group(
+            GroupId=group_id,
+            GroupName='NEW_SECURITY_GROUP9'
+            )
+
+
+
+
 
 
 def main():
@@ -139,12 +205,14 @@ def main():
     instance_id = ec2_handler.create()
     print("EC2 instance provisioning started")
 
-    raw_input("Hit Enter to continue>")
+    input("Hit Enter to continue>")
     ec2_handler.get(instance_id)
 
-    raw_input("Hit Enter to continue>")
+    input("Hit Enter to continue>")
     ec2_handler.delete(instance_id)
+
 
 
 if __name__ == '__main__':
     main()
+    
