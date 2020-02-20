@@ -53,9 +53,9 @@ class S3Handler:
             return error_message_dict['unknown_error']
 
     def _get_file_extension(self, file_name):
-        print('得到extension：{}'.format(os.path.exists(file_name)))
+        # print('得到extension：{}'.format(os.path.exists(file_name)))
         if os.path.exists(file_name):
-            print('得到extension：.splitext={}'.format(os.path.splitext(file_name)))
+            # print('得到extension：.splitext={}'.format(os.path.splitext(file_name)))
             return os.path.splitext(file_name)
 
     def _get(self, bucket_name):
@@ -70,6 +70,7 @@ class S3Handler:
             if response_code == '404':
                 return False
             elif response_code == '403':
+                # print('403 错误')
                 return self._error_messages('operation_not_permitted')
             elif response_code == '200':
                 return True
@@ -85,8 +86,13 @@ class S3Handler:
             return self._error_messages('bucket_name_empty')
 
         try:
-            if self._get(bucket_name):
+            return_val = self._get(bucket_name)
+            if type(return_val) == str:
+                # 403 error
+                return return_val
+            if return_val:
                 return self._error_messages('bucket_name_exists')
+
             self.client.create_bucket(Bucket=bucket_name,
                                       CreateBucketConfiguration={'LocationConstraint': REGION})
         except Exception as e:
@@ -170,7 +176,7 @@ class S3Handler:
         #    - Use self._get_file_extension() method to get the extension of the file.
         try:
             extension = self._get_file_extension(source_file_name)[1][1:]
-            print('Extension是{}'.format(extension))
+            # print('Extension是{}'.format(extension))
             self.client.upload_file(
                 source_file_name,
                 bucket_name,
@@ -179,7 +185,7 @@ class S3Handler:
             )
         # except Exception as e: #
         except ClientError as e:
-            print('上传文件出错',e)
+            # print('上传文件出错',e)
             return self._error_messages('unknown_error')
 
         # Success response
@@ -188,14 +194,14 @@ class S3Handler:
 
     def download(self, dest_object_name, bucket_name, source_file_name=''):
         # if source_file_name is not specified then use the dest_object_name as the source_file_name
-        print('检查参数: {}/{}/[{}]'.format(dest_object_name, bucket_name,source_file_name))
+        # print('检查参数: {}/{}/[{}]'.format(dest_object_name, bucket_name,source_file_name))
         # If the current directory already contains a file with source_file_name then move it as a backup
         # with following format: <source_file_name.bak.current_time_stamp_in_millis>
         if os.path.exists(source_file_name):
 
             milli_sec = int(round(time.time() * 1000))
             new_name = '{}.bak.{}'.format(source_file_name,milli_sec)
-            print('本地存在同名文件,改名为：{}'.format(new_name))
+            # print('本地存在同名文件,改名为：{}'.format(new_name))
             os.rename(source_file_name, new_name)
         # Parameter Validation
         try:
@@ -213,8 +219,8 @@ class S3Handler:
         try:
             self.client.get_object(Bucket=bucket_name, Key=dest_object_name)
         except Exception as e:
-            print('文件不存在: {}'.format(dest_object_name))
-            print('文件不存在: {}'.format(e))
+            # print('文件不存在: {}'.format(dest_object_name))
+            # print('文件不存在: {}'.format(e))
             return self._error_messages('non_existent_object')
 
         # SDK Call
@@ -226,7 +232,7 @@ class S3Handler:
 
     def delete(self, dest_object_name, bucket_name):
         # Parameter Validation
-        print('检查参数: {}-{}'.format(dest_object_name,bucket_name))
+        # print('检查参数: {}-{}'.format(dest_object_name,bucket_name))
         try:
             # check if bucket_name exists
             return_val = self._get(bucket_name)
@@ -242,8 +248,8 @@ class S3Handler:
         try:
             self.client.get_object(Bucket=bucket_name, Key=dest_object_name)
         except Exception as e:
-            print('文件不存在: {}'.format(dest_object_name))
-            print('文件不存在: {}'.format(e))
+            # print('文件不存在: {}'.format(dest_object_name))
+            # print('文件不存在: {}'.format(e))
             return self._error_messages('non_existent_object')
 
         response = self.client.delete_object(
@@ -283,22 +289,20 @@ class S3Handler:
 
 
     def find(self, file_extension, bucket_name=''):
-        print('检查参数：{}-[{}]'.format(file_extension,bucket_name))
+        # print('检查参数：{}-[{}]'.format(file_extension,bucket_name))
         # Return object names that match the given file extension
         if not bucket_name:
         # If bucket_name is empty then search all buckets
-            print('没有指定bucket')
+            # print('没有指定bucket')
             response = self.client.list_buckets()
             res_file_list = []
             # Output the bucket names
-            print('存在以下buckets:')
+            # print('存在以下buckets:')
             for bucket in response['Buckets']:
-                print(bucket['Name'])
+                # print(bucket['Name'])
                 file_list_str = self.find(file_extension,bucket['Name'])
-                print('file_list = {}'.format(file_list_str))
                 if len(file_list_str) > 0:
                     res_file_list.append(file_list_str)
-            print('res_file_list = {}'.format(res_file_list))
             return ','.join(res_file_list)
 
         else:
@@ -309,14 +313,13 @@ class S3Handler:
                 res = []
                 for d in contents_list:
                     file_name = d['Key']
-                    print('文件名={}'.format(file_name))
+                    # print('文件名={}'.format(file_name))
                     response_obj = self.client.get_object(Bucket=bucket_name,Key=file_name)
-                    print(response_obj)
+                    # print(response_obj)
                     if response_obj['Metadata']:
                         if response_obj['Metadata']['extension'] == file_extension:
-                            print('找到一个：{}'.format(file_name))
+                            # print('找到一个：{}'.format(file_name))
                             res.append(file_name)
-                print('res = {}'.format(res))
                 return ','.join(res)
             else:
                 return ''
