@@ -50,10 +50,12 @@ class S3Handler:
         if issue:
             return error_message_dict[issue]
         else:
-            return error_message['unknown_error']
+            return error_message_dict['unknown_error']
 
     def _get_file_extension(self, file_name):
+        print('得到extension：{}'.format(os.path.exists(file_name)))
         if os.path.exists(file_name):
+            print('得到extension：.splitext={}'.format(os.path.splitext(file_name)))
             return os.path.splitext(file_name)
 
     def _get(self, bucket_name):
@@ -147,6 +149,7 @@ class S3Handler:
         #    - source_file_name exits in current directory
         #    - bucket_name exists
         if not os.path.exists(source_file_name):
+            print('找不到这个文件')
             self._error_messages('missing_source_file')
         print('本地存在{}'.format(source_file_name))
         try:
@@ -166,33 +169,33 @@ class S3Handler:
         #    - When uploading the source_file_name and add it to object's meta-data
         #    - Use self._get_file_extension() method to get the extension of the file.
         try:
-            extension = self._get_file_extension(source_file_name)
+            extension = self._get_file_extension(source_file_name)[1][1:]
+            print('Extension是{}'.format(extension))
             self.client.upload_file(
                 source_file_name,
                 bucket_name,
                 dest_object_name,
-                ExtraArgs={'Metadata':{'Extension':extension}}
+                ExtraArgs={'Metadata':{'extension':extension}}
             )
-
-            # Success response
-            operation_successful = ('File %s uploaded to bucket %s.' % (source_file_name, bucket_name))
-            return operation_successful
         # except Exception as e: #
         except ClientError as e:
-            print(e)
+            print('上传文件出错',e)
             return self._error_messages('unknown_error')
 
-
+        # Success response
+        operation_successful = ('File %s uploaded to bucket %s.' % (source_file_name, bucket_name))
+        return operation_successful
 
     def download(self, dest_object_name, bucket_name, source_file_name=''):
         # if source_file_name is not specified then use the dest_object_name as the source_file_name
-        if not source_file_name:
-            source_file_name = dest_object_name
+        print('检查参数: {}/{}/[{}]'.format(dest_object_name, bucket_name,source_file_name))
         # If the current directory already contains a file with source_file_name then move it as a backup
         # with following format: <source_file_name.bak.current_time_stamp_in_millis>
         if os.path.exists(source_file_name):
+
             milli_sec = int(round(time.time() * 1000))
             new_name = '{}.bak.{}'.format(source_file_name,milli_sec)
+            print('本地存在同名文件,改名为：{}'.format(new_name))
             os.rename(source_file_name, new_name)
         # Parameter Validation
         try:
@@ -207,7 +210,11 @@ class S3Handler:
             print(e)
             raise e
 
-        if not self.client.get_object(Bucket=bucket_name, Key=dest_object_name):
+        try:
+            self.client.get_object(Bucket=bucket_name, Key=dest_object_name)
+        except Exception as e:
+            print('文件不存在: {}'.format(dest_object_name))
+            print('文件不存在: {}'.format(e))
             return self._error_messages('non_existent_object')
 
         # SDK Call
@@ -219,6 +226,7 @@ class S3Handler:
 
     def delete(self, dest_object_name, bucket_name):
         # Parameter Validation
+        print('检查参数: {}-{}'.format(dest_object_name,bucket_name))
         try:
             # check if bucket_name exists
             return_val = self._get(bucket_name)
@@ -231,7 +239,11 @@ class S3Handler:
             print(e)
             raise e
 
-        if not self.client.get_object(Bucket=bucket_name, Key=dest_object_name):
+        try:
+            self.client.get_object(Bucket=bucket_name, Key=dest_object_name)
+        except Exception as e:
+            print('文件不存在: {}'.format(dest_object_name))
+            print('文件不存在: {}'.format(e))
             return self._error_messages('non_existent_object')
 
         response = self.client.delete_object(
@@ -258,51 +270,56 @@ class S3Handler:
             raise e
 
         # Delete the bucket only if it is empty
-        response = self.client.list_objects(Bucket=bucket_name)
+        response = self.client.list_objects_v2(Bucket=bucket_name)
         # a list of dict containing Metadata about each object returned
-        contents_list = response['Contents']
-        if len(contents_list) == 0:
+        if response['KeyCount'] > 0:
+            return self._error_messages('non_empty_bucket')
+        else:
             response = self.client.delete_bucket(Bucket=bucket_name)
-
             # Success response
             operation_successful = ("Deleted bucket %s." % bucket_name)
             return operation_successful
-        else:
-            return self._error_messages('non_empty_bucket')
+
 
 
     def find(self, file_extension, bucket_name=''):
+        print('检查参数：{}-[{}]'.format(file_extension,bucket_name))
         # Return object names that match the given file extension
         if not bucket_name:
         # If bucket_name is empty then search all buckets
-            response = self.cient.list_buckets()
+            print('没有指定bucket')
+            response = self.client.list_buckets()
+            res_file_list = []
             # Output the bucket names
-            print('Existing buckets:')
+            print('存在以下buckets:')
             for bucket in response['Buckets']:
-                print(f'  {bucket["Name"]}')
-                return self.find(file_extension,bucket["Name"])
-                """
-                response_objs = self.client.list_objects(Bucket=bucket_name)
+                print(bucket['Name'])
+                file_list_str = self.find(file_extension,bucket['Name'])
+                print('file_list = {}'.format(file_list_str))
+                if len(file_list_str) > 0:
+                    res_file_list.append(file_list_str)
+            print('res_file_list = {}'.format(res_file_list))
+            return ','.join(res_file_list)
+
+        else:
+        # If bucket_name is specified then search for objects in that bucket.
+            response = self.client.list_objects_v2(Bucket=bucket_name)
+            if response['KeyCount'] > 0:
                 contents_list = response['Contents']
                 res = []
                 for d in contents_list:
                     file_name = d['Key']
-                    response_obj = self.client.get_object(Bucket=bucket_name, Key=file_name)
-                    if response_obj['Metadata']['Extension'] == file_extension:
-                        res.append(file_name)
-                """
-        else:
-        # If bucket_name is specified then search for objects in that bucket.
-            response = self.client.list_objects(Bucket=bucket_name)
-            contents_list = response['Contents']
-            res = []
-            for d in contents_list:
-                file_name = d['Key']
-                response_obj = self.client.get_object(Bucket=bucket_name,Key=file_name)
-                if response_obj['Metadata']['Extension'] == file_extension:
-                    res.append(file_name)
-            return ','.join(res)
-        
+                    print('文件名={}'.format(file_name))
+                    response_obj = self.client.get_object(Bucket=bucket_name,Key=file_name)
+                    print(response_obj)
+                    if response_obj['Metadata']:
+                        if response_obj['Metadata']['extension'] == file_extension:
+                            print('找到一个：{}'.format(file_name))
+                            res.append(file_name)
+                print('res = {}'.format(res))
+                return ','.join(res)
+            else:
+                return ''
 
 
     def dispatch(self, command_string):
@@ -339,20 +356,39 @@ class S3Handler:
             # dest_object_name and bucket_name are compulsory; source_file_name is optional
             # Use self._error_messages['incorrect_parameter_number'] if number of parameters is less
             # than number of compulsory parameters
-            source_file_name = ''
-            bucket_name = ''
-            dest_object_name = ''
+            if len(parts) == 4:
+                source_file_name = parts[3]
+                bucket_name = parts[2]
+                dest_object_name = parts[1]
+            elif len(parts) == 3:
+                bucket_name = parts[2]
+                dest_object_name = parts[1]
+                source_file_name = dest_object_name
+            else:
+                return self._error_messages('incorrect_parameter_number')
             response = self.download(dest_object_name, bucket_name, source_file_name)
         elif parts[0] == 'delete':
-            dest_object_name = ''
-            bucket_name = ''
-            response = self.delete(dest_object_name, bucket_name)
+            if len(parts) == 3:
+                dest_object_name = parts[1]
+                bucket_name = parts[2]
+                response = self.delete(dest_object_name, bucket_name)
+            else:
+                return self._error_messages('incorrect_parameter_number')
         elif parts[0] == 'deletedir':
-            bucket_name = ''
-            response = self.deletedir(bucket_name)
+            if len(parts) == 2:
+                bucket_name = parts[1]
+                response = self.deletedir(bucket_name)
+            else:
+                return self._error_messages('incorrect_parameter_number')
         elif parts[0] == 'find':
-            file_extension = ''
-            bucket_name = ''
+            if len(parts) == 3:
+                file_extension = parts[1]
+                bucket_name = parts[2]
+            elif len(parts) == 2:
+                file_extension = parts[1]
+                bucket_name = ''
+            else:
+                return self._error_messages('incorrect_parameter_number')
             response = self.find(file_extension, bucket_name)
         elif parts[0] == 'listdir':
             bucket_name = ''
