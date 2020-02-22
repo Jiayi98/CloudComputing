@@ -149,15 +149,15 @@ class S3Handler:
             return operation_successful
 
     def upload(self, source_file_name, bucket_name, dest_object_name=''):
-        print('检查所有参数{}-{}-{}'.format(source_file_name,bucket_name,dest_object_name))
+        # print('检查所有参数{}-{}-{}'.format(source_file_name,bucket_name,dest_object_name))
 
         # 1. Parameter Validation
         #    - source_file_name exits in current directory
         #    - bucket_name exists
         if not os.path.exists(source_file_name):
-            print('找不到这个文件')
-            self._error_messages('missing_source_file')
-        print('本地存在{}'.format(source_file_name))
+            # print('找不到这个文件')
+            return self._error_messages('missing_source_file')
+        # print('本地存在{}'.format(source_file_name))
         try:
             # check if bucket_name exists
             return_val = self._get(bucket_name)
@@ -306,6 +306,20 @@ class S3Handler:
             return ','.join(res_file_list)
 
         else:
+            s3 = boto3.resource('s3')
+            bucket = s3.Bucket(bucket_name)
+            obj_summary_iterator = bucket.objects.all()
+            res = []
+
+            for obj in obj_summary_iterator:
+                response_obj = obj.get()
+                if response_obj['Metadata']:
+                    if response_obj['Metadata']['extension'] == file_extension:
+                        # print('找到一个：{}'.format(file_name))
+                        res.append(obj.key)
+
+            return ','.join(res)
+        """
         # If bucket_name is specified then search for objects in that bucket.
             response = self.client.list_objects_v2(Bucket=bucket_name)
             if response['KeyCount'] > 0:
@@ -323,7 +337,7 @@ class S3Handler:
                 return ','.join(res)
             else:
                 return ''
-
+        """
 
     def dispatch(self, command_string):
         parts = command_string.split(" ")
