@@ -6,7 +6,7 @@ metadata:
     name: greetings
 spec:
   containers:
-    - image: us.gcr.io/cloudark-test-gke/greetpod:1512924392448
+    - image: gcr.io/cloud-computing-hw3-jiayi/greetings:v13
       name: greetpod
       ports:
       - containerPort: 5000
@@ -16,6 +16,6 @@ spec:
         - name: "DB"
           value: testdb
         - name: "HOST"
-          value: 35.225.61.225
+          value: 35.188.69.87
         - name: "USER"
           value: root
