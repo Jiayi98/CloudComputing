@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: greetings1
-        image: gcr.io/cloudark-test-gke/greetings
+        image: gcr.io/cloud-computing-hw3-jiayi/greetings:latest
         ports:
         - containerPort: 5000
         env:
@@ -25,6 +25,6 @@ spec:
           - name: "DB"
             value: testdb
           - name: "HOST"
-            value: 104.198.62.251
+            value: 34.67.129.73
           - name: "USER"
             value: root
