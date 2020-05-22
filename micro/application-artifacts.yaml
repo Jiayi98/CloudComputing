@@ -1,0 +1,41 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: application-artifacts
+spec:
+  selector:
+    app: application
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 5000
+  type: LoadBalancer
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: application-artifacts
+  labels:
+    app: application
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app: application
+  template:
+    metadata:
+      labels:
+        app: application
+    spec:
+      containers:
+      - name: application1
+        image: gcr.io/cloud-computing-hw3-jiayi/application:latest
+        ports:
+        - containerPort: 5000
+        env:
+          - name: "PASSWORD"
+            value: testpass123!@#
+          - name: "USER"
+            value: root
+          - name: "HOST"
+            value: mysql-artifacts
